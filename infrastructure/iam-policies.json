@@ -1,0 +1,67 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DynamoDBMonitorsTableAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Scan",
+        "dynamodb:Query"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/cloudpulse-monitors-*",
+        "arn:aws:dynamodb:*:*:table/cloudpulse-monitors-*/index/*"
+      ]
+    },
+    {
+      "Sid": "DynamoDBChecksTableAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/cloudpulse-checks-*",
+        "arn:aws:dynamodb:*:*:table/cloudpulse-checks-*/index/*"
+      ]
+    },
+    {
+      "Sid": "DynamoDBIncidentsTableAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Scan",
+        "dynamodb:Query"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/cloudpulse-incidents-*",
+        "arn:aws:dynamodb:*:*:table/cloudpulse-incidents-*/index/*"
+      ]
+    },
+    {
+      "Sid": "SNSPublishAlertsAccess",
+      "Effect": "Allow",
+      "Action": [
+        "sns:Publish"
+      ],
+      "Resource": "arn:aws:sns:*:*:cloudpulse-alerts-*"
+    },
+    {
+      "Sid": "CloudWatchLoggingAccess",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*:*:*"
+    }
+  ]
+}
