@@ -1,0 +1,341 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  CloudPulse Backend - Serverless Website and API Uptime Monitoring and Incident Alerting Platform.
+  Provisions Amazon API Gateway, AWS Lambda, Amazon DynamoDB, Amazon EventBridge Scheduler,
+  Amazon SNS, Amazon Cognito, and Amazon CloudWatch.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment target environment.
+
+  AlertNotificationEmail:
+    Type: String
+    Default: devops-alerts@cloudpulse.io
+    Description: Email address for Amazon SNS incident alarm subscriptions.
+
+  DeploymentBucketName:
+    Type: String
+    Description: The S3 bucket name in your AWS account where backend.zip was uploaded.
+
+  DeploymentZipKey:
+    Type: String
+    Default: backend.zip
+    Description: The S3 key/filename of the backend package in DeploymentBucketName.
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.13
+    Tracing: Active
+    Environment:
+      Variables:
+        ENV: !Ref Environment
+        STORAGE_BACKEND: dynamodb
+        NOTIFICATION_BACKEND: sns
+        MONITORS_TABLE: !Ref MonitorsTable
+        CHECKS_TABLE: !Ref ChecksTable
+        INCIDENTS_TABLE: !Ref IncidentsTable
+        SNS_TOPIC_ARN: !Ref AlertsTopic
+        COGNITO_USER_POOL_ID: !Ref UserPool
+        COGNITO_CLIENT_ID: !Ref UserPoolClient
+
+Resources:
+  # ============================================================================
+  # 1. AUTHENTICATION & ACCESS CONTROL (Amazon Cognito)
+  # ============================================================================
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "cloudpulse-user-pool-${Environment}"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+        - Name: name
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "cloudpulse-web-client-${Environment}"
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+
+  # ============================================================================
+  # 2. DATABASE LAYER (Amazon DynamoDB)
+  # ============================================================================
+  MonitorsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "cloudpulse-monitors-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: user_id-index
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  ChecksTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "cloudpulse-checks-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: monitor_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: monitor_id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  IncidentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "cloudpulse-incidents-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: monitor_id
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: monitor_id-status-index
+          KeySchema:
+            - AttributeName: monitor_id
+              KeyType: HASH
+            - AttributeName: status
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # ============================================================================
+  # 3. NOTIFICATIONS & ALERTS (Amazon SNS)
+  # ============================================================================
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "cloudpulse-alerts-${Environment}"
+      DisplayName: "CloudPulse Monitoring Alerts"
+
+  AlertsEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertsTopic
+      Protocol: email
+      Endpoint: !Ref AlertNotificationEmail
+
+  # ============================================================================
+  # 4. API GATEWAY (Amazon API Gateway HTTP API)
+  # ============================================================================
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - PATCH
+          - OPTIONS
+      Auth:
+        Authorizers:
+          CognitoJwtAuthorizer:
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              audience:
+                - !Ref UserPoolClient
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+
+  # ============================================================================
+  # 5. SERVERLESS COMPUTE (AWS Lambda)
+  # ============================================================================
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "cloudpulse-api-${Environment}"
+      CodeUri:
+        Bucket: !Ref DeploymentBucketName
+        Key: !Ref DeploymentZipKey
+      Handler: handlers.api.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MonitorsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChecksTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IncidentsTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AlertsTopic.TopicName
+      Events:
+        PublicHealth:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /health
+            Method: GET
+        PublicApiHealth:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/health
+            Method: GET
+        PublicLogin:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/auth/login
+            Method: POST
+        PublicRegister:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/auth/register
+            Method: POST
+        PublicValidateSSRF:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/tools/validate-url
+            Method: POST
+        ProxyApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/{proxy+}
+            Method: ANY
+
+  HealthCheckerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "cloudpulse-checker-${Environment}"
+      CodeUri:
+        Bucket: !Ref DeploymentBucketName
+        Key: !Ref DeploymentZipKey
+      Handler: handlers.checker.handler
+      Timeout: 60
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MonitorsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChecksTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IncidentsTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AlertsTopic.TopicName
+      Events:
+        ScheduledProbe:
+          Type: Schedule
+          Properties:
+            Schedule: "rate(1 minute)"
+            Description: "EventBridge periodic probe invocation for active monitors"
+            Enabled: true
+
+  # ============================================================================
+  # 6. OBSERVABILITY & ALARMS (Amazon CloudWatch)
+  # ============================================================================
+  CheckerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "cloudpulse-checker-errors-${Environment}"
+      AlarmDescription: "Alerts when HealthChecker Lambda execution encounters errors"
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref HealthCheckerFunction
+      AlarmActions:
+        - !Ref AlertsTopic
+
+# ============================================================================
+# OUTPUTS
+# ============================================================================
+Outputs:
+  ApiEndpoint:
+    Description: "HTTP API Gateway endpoint URL"
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiEndpoint"
+
+  CognitoUserPoolId:
+    Description: "Amazon Cognito User Pool ID"
+    Value: !Ref UserPool
+
+  CognitoClientId:
+    Description: "Amazon Cognito App Client ID"
+    Value: !Ref UserPoolClient
+
+  SNSTopicArn:
+    Description: "Amazon SNS Topic ARN for incident notification dispatch"
+    Value: !Ref AlertsTopic
+
+  MonitorsTableName:
+    Description: "Amazon DynamoDB Monitors Table"
+    Value: !Ref MonitorsTable
+
+  ChecksTableName:
+    Description: "Amazon DynamoDB Checks Table"
+    Value: !Ref ChecksTable
+
+  IncidentsTableName:
+    Description: "Amazon DynamoDB Incidents Table"
+    Value: !Ref IncidentsTable

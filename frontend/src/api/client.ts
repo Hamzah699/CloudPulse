@@ -1,6 +1,7 @@
 import type { Monitor, CheckResult, Incident, Stats, NotificationItem, AuthUser } from '../types';
 
-const rawUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '') as string;
+const DEFAULT_PROD_API = 'https://9mo8pytaqj.execute-api.ap-south-1.amazonaws.com';
+const rawUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || (import.meta.env.PROD ? DEFAULT_PROD_API : '')) as string;
 const BASE_URL = rawUrl.replace(/\/+$/, '');
 
 class ApiClient {
