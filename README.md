@@ -8,7 +8,11 @@
 
 **CloudPulse** is a serverless website and API uptime monitoring and incident alerting platform built on Amazon Web Services (AWS) for the **FT-III Cloud Computing Practical Examination**.
 
-It provides high-frequency distributed HTTP health checks, measures granular socket latency (DNS, TCP, TTFB), enforces multi-layer Server-Side Request Forgery (SSRF) defense, tracks outage state transitions via a state machine, and publishes real-time incident alert emails via Amazon SNS.
+### 🌐 Live Production Deployment
+- **Live Web Application (AWS Amplify):** [https://main.dw9pu8rtsj47n.amplifyapp.com](https://main.dw9pu8rtsj47n.amplifyapp.com)
+- **Live HTTP API Gateway:** `https://9mo8pytaqj.execute-api.ap-south-1.amazonaws.com`
+- **AWS Region:** `ap-south-1` (Mumbai)
+- **Deployment Status:** Active & Tested (Serverless Free Tier)
 
 ---
 
