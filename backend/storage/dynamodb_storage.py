@@ -9,8 +9,12 @@ from boto3.dynamodb.conditions import Key, Attr
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 
-from .db_interface import DatabaseInterface
-from ..core.models import Monitor, CheckResult, Incident
+try:
+    from .db_interface import DatabaseInterface
+    from ..core.models import Monitor, CheckResult, Incident
+except (ImportError, ValueError):
+    from storage.db_interface import DatabaseInterface
+    from core.models import Monitor, CheckResult, Incident
 
 
 def decimal_to_native(obj: Any) -> Any:

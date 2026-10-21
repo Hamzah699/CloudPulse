@@ -5,7 +5,10 @@ Defines the uniform contract implemented by both DynamoDBStorage and LocalStorag
 
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
-from ..core.models import Monitor, CheckResult, Incident
+try:
+    from ..core.models import Monitor, CheckResult, Incident
+except (ImportError, ValueError):
+    from core.models import Monitor, CheckResult, Incident
 
 
 class DatabaseInterface(ABC):

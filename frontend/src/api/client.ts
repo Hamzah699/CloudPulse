@@ -1,6 +1,7 @@
 import type { Monitor, CheckResult, Incident, Stats, NotificationItem, AuthUser } from '../types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+const rawUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '') as string;
+const BASE_URL = rawUrl.replace(/\/+$/, '');
 
 class ApiClient {
   private token: string | null = null;

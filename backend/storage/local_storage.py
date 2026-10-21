@@ -8,8 +8,12 @@ import json
 import os
 import contextlib
 from typing import List, Optional, Dict, Any, Generator
-from .db_interface import DatabaseInterface
-from ..core.models import Monitor, CheckResult, Incident
+try:
+    from .db_interface import DatabaseInterface
+    from ..core.models import Monitor, CheckResult, Incident
+except (ImportError, ValueError):
+    from storage.db_interface import DatabaseInterface
+    from core.models import Monitor, CheckResult, Incident
 
 
 class LocalStorage(DatabaseInterface):

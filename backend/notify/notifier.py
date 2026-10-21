@@ -9,7 +9,10 @@ import time
 import json
 import boto3
 from typing import Optional, Dict, Any, List
-from ..core.models import Incident, Monitor
+try:
+    from ..core.models import Incident, Monitor
+except (ImportError, ValueError):
+    from core.models import Incident, Monitor
 
 
 class Notifier(ABC):

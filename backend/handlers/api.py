@@ -7,13 +7,22 @@ import json
 import re
 from typing import Dict, Any, Optional
 
-from ..core.models import Monitor, CheckResult, Incident
-from ..core.ssrf_guard import validate_target_url
-from ..core.http_checker import perform_health_check
-from ..core.incident_engine import process_check_result, IncidentEventType
-from ..core.auth import get_authenticated_user, generate_local_token
-from ..storage import get_storage
-from ..notify.notifier import get_notifier, LocalNotifier
+try:
+    from ..core.models import Monitor, CheckResult, Incident
+    from ..core.ssrf_guard import validate_target_url
+    from ..core.http_checker import perform_health_check
+    from ..core.incident_engine import process_check_result, IncidentEventType
+    from ..core.auth import get_authenticated_user, generate_local_token
+    from ..storage import get_storage
+    from ..notify.notifier import get_notifier, LocalNotifier
+except (ImportError, ValueError):
+    from core.models import Monitor, CheckResult, Incident
+    from core.ssrf_guard import validate_target_url
+    from core.http_checker import perform_health_check
+    from core.incident_engine import process_check_result, IncidentEventType
+    from core.auth import get_authenticated_user, generate_local_token
+    from storage import get_storage
+    from notify.notifier import get_notifier, LocalNotifier
 
 
 def build_response(status_code: int, body: Any, cors: bool = True) -> Dict[str, Any]:

@@ -10,11 +10,18 @@ import json
 import time
 from typing import Dict, Any, List
 
-from ..core.models import Monitor, CheckResult, Incident
-from ..core.http_checker import perform_health_check
-from ..core.incident_engine import process_check_result, IncidentEventType
-from ..storage import get_storage
-from ..notify.notifier import get_notifier
+try:
+    from ..core.models import Monitor, CheckResult, Incident
+    from ..core.http_checker import perform_health_check
+    from ..core.incident_engine import process_check_result, IncidentEventType
+    from ..storage import get_storage
+    from ..notify.notifier import get_notifier
+except (ImportError, ValueError):
+    from core.models import Monitor, CheckResult, Incident
+    from core.http_checker import perform_health_check
+    from core.incident_engine import process_check_result, IncidentEventType
+    from storage import get_storage
+    from notify.notifier import get_notifier
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:

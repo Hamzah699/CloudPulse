@@ -23,6 +23,8 @@ venv/
 frontend/dist/
 dist/
 build/
+*.zip
+.aws-sam/
 
 # IDE and OS files
 .vscode/
